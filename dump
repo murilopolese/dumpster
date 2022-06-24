@@ -1,0 +1,193 @@
+#!/usr/bin/env python3
+
+import glob
+import os
+import sys
+import shutil
+import requests
+import json
+
+"""
+
+Helper functions and configuration
+
+"""
+
+BUCKET = 'bananew'
+DB_URL = 'http://bananew.s3.amazonaws.com/db.json'
+SRC = "../bananabanana"
+# SRC = "todump"
+TMP = "temporary"
+
+W  = '\033[0m'  # white (normal)
+R  = '\033[31m' # red
+G  = '\033[32m' # green
+O  = '\033[33m' # orange
+B  = '\033[34m' # blue
+P  = '\033[35m' # purple
+
+def filter(function, iterable):
+    return list(item for item in iterable if function(item))
+
+def get_filename(file):
+    parts = file.split('/')
+    fullname = parts.pop() # get last entry (the file)
+    parts = fullname.split('.')
+    parts.pop() # remove extension
+    return '.'.join(parts)
+
+def get_extension(file):
+    parts = file.split('/')
+    filename = parts.pop()
+    parts = filename.split('.')
+    return parts.pop()
+
+def is_video(file):
+    ext = get_extension(file)
+    return ext == 'mp4' or ext == 'mov' or ext == 'avi' or ext == 'webm'
+
+def is_image(file):
+    ext = get_extension(file)
+    return ext == 'jpg' or ext == 'jpeg' or ext == 'png'
+
+def is_listed(file):
+    return is_image(file) or is_video(file)
+
+def list_template(item):
+    return """
+    <li>
+        <a href="{1}" target="_blank">
+            <img src="thumbnail_{0}.jpg" alt="{0}" loading="lazy" />
+        </a>
+    </li>
+    """.format(item['filename'], item['fullname'])
+
+def html_template(data = []):
+    list_items = []
+    for item in data[::-1]:
+        list_items.append(list_template(item))
+    return """<!DOCTYPE html>
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="utf-8">
+    <title>Banana Dumps</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="main.js" charset="utf-8"></script>
+  </head>
+  <body>
+    <h1>Banana Dumps</h1>
+    <p>This gallery contains references, sketches, memories and dreams.</p>
+    <ul>{0}</ul>
+  </body>
+</html>
+    """.format(''.join(list_items))
+
+"""
+
+BUILDING STEPS
+
+"""
+
+
+# download latest version of db.js
+# print(P+"=> DOWNLOADING LATEST DB"+W)
+# db = requests.get(DB_URL)
+# open(TMP+"/db.json", 'wb').write(db.content)
+open(TMP+"/db.json", 'wb').write(b'[]')
+
+# get all files from `todump`
+print(P+"=> READING FOLDER"+W)
+globs = glob.glob('{0}/*'.format(SRC))
+globs.sort(key=os.path.getmtime)
+# Cleaning folder name
+files = []
+for g in globs:
+    files.append(get_filename(g) + '.' + get_extension(g))
+
+print(G+"=> FILES FOUND"+W)
+for file in files:
+    print("- " + file)
+
+print(P+"=> COPING FILES TO TEMPORARY FOLDER"+W)
+# for file in files:
+#     shutil.copy2(SRC+'/'+file, TMP)
+
+print(P+"=> FILTERING FILE TYPES"+W)
+videos = filter(is_video, files)
+images = filter(is_image, files)
+
+print(G+"=> VIDEOS"+W)
+for file in videos:
+    print("- " + file)
+print(G+"=> IMAGES"+W)
+for file in images:
+    print("- " + file)
+
+print(P+"=> GENERATING THUMBNAILS FOR VIDEOS"+W)
+for file in videos:
+    filename = get_filename(file)
+    os.system(
+        """ffmpeg -hide_banner -loglevel error -n -i "{0}/{1}" -ss 00:00:01.000 -vframes 1 "{2}/thumbnail_{3}.png" > /dev/null"""
+            .format(SRC, file, TMP, filename)
+    )
+
+print(P+"=> GENERATING THUMBNAILS FOR IMAGES"+W)
+for file in images:
+    filename = get_filename(file)
+    shutil.copy(SRC+'/'+file, "{0}/thumbnail_{1}".format(TMP, file))
+
+print(P+"=> OPTIMIZING THUMBNAILS FOR WEB"+W)
+os.system("mogrify -resize 600x -format jpg -strip -quality 85 -interlace line temporary/thumbnail_*")
+
+print(P+"=> CLEAN BIG THUMBNAILS"+W)
+globs = glob.glob('{0}/thumbnail_*.png'.format(TMP))
+for g in globs:
+    os.remove(g)
+
+print(P+"=> GENERATING DATA"+W)
+files = filter(is_listed, files)
+delta = []
+for file in files:
+    filename = get_filename(file)
+    extension = get_extension(file)
+    item = {
+        "filename": filename,
+        "extension": extension,
+        "fullname": "{0}.{1}".format(filename, extension)
+    }
+    delta.append(item)
+
+print(P+"=> APPENDING NEW TO OLD"+W)
+data = []
+with open(TMP+'/db.json', 'r') as file:
+    data = json.load(file)
+# data = data + delta
+data = delta
+
+print(P+"=> WRITING DATA TO DB FILE"+W)
+with open(TMP+'/db.json', 'w') as file:
+    file.write(json.dumps(data))
+
+print(P+"=> WRITING A FULL FEED FILE"+W)
+with open(TMP+'/everything.html', 'w') as file:
+    file.write(html_template(data))
+
+print(P+"=> SENDING FILES TO BUCKET"+W)
+os.system(
+    "aws s3 sync ./{0} s3://{1} --exclude '.*' --acl public-read".format(TMP, BUCKET)
+)
+os.system(
+    "aws s3 sync ./app s3://{0} --exclude '.*' --acl public-read".format(BUCKET)
+)
+
+print(P+"=> BACKING UP DB"+W)
+shutil.copy2(TMP+'/db.json', './')
+
+
+print(P+"=> CLEANING LOCAL FILES"+W)
+# for root, dirs, files in os.walk(TMP):
+#     for file in files:
+#         os.remove(os.path.join(root, file))
+# for root, dirs, files in os.walk(SRC):
+#     for file in files:
+#         os.remove(os.path.join(root, file))

@@ -1,0 +1,212 @@
+#!/usr/bin/env python3
+
+import glob
+import os
+import sys
+import shutil
+import requests
+import json
+
+"""
+
+Helper functions and configuration
+
+"""
+
+BUCKET = 'bananew'
+DB_URL = 'http://bananew.s3.amazonaws.com/db.json'
+# SRC = "../bananabanana"
+SRC = "todump"
+TMP = "temporary"
+
+W  = '\033[0m'  # white (normal)
+R  = '\033[31m' # red
+G  = '\033[32m' # green
+O  = '\033[33m' # orange
+B  = '\033[34m' # blue
+P  = '\033[35m' # purple
+
+def filter(function, iterable):
+    return list(item for item in iterable if function(item))
+
+def download_latest_db():
+    db = requests.get(DB_URL)
+    open(TMP+"/db.json", 'wb').write(db.content)
+
+def get_filename(file):
+    parts = file.split('/')
+    filename = ''.join(parts[-1:])
+    parts = filename.split('.')
+    filename = ''.join(parts[:-1])
+    return filename
+
+def is_video(file):
+    ext = file[-3:].lower()
+    return ext == 'mp4' or ext == 'mov' or ext == 'avi'
+
+def is_image(file):
+    ext = file[-3:].lower()
+    return ext == 'jpg' or ext == 'peg' or ext == 'png'
+
+def is_listed(file):
+    return is_video(file) or is_image(file)
+
+def generate_thumbnails_for_images(files = []):
+    for file in files:
+        filename = get_filename(file)
+        shutil.copy(file, "{0}/thumbnail_{1}.jpg".format(TMP, filename))
+
+def generate_thumbnails_for_videos(files = []):
+    for file in files:
+        filename = get_filename(file)
+        os.system(
+            """ffmpeg -hide_banner -loglevel error -n -i "{0}" -ss 00:00:01.000 -vframes 1 "{1}/thumbnail_{2}.png" > /dev/null"""
+                .format(file, TMP, filename)
+        )
+
+def compress_thumbnails():
+    os.system("mogrify -resize 400x -format jpg -strip -quality 85 -interlace line temporary/thumbnail_*")
+    return []
+
+def generate_data(files = []):
+    data = []
+    for file in files:
+        parts = file.split('/')
+        filename = parts[-1]
+        thumbnail = get_filename(file)
+        item = {
+            "original": filename,
+            "thumbnail": "thumbnail_{0}.jpg".format(thumbnail)
+        }
+        data.append(item)
+    return data
+
+def append_data_to_db():
+    return 0
+
+def generate_rss():
+    return 0
+
+def upload_files():
+    os.system(
+        "aws s3 sync ./{0} s3://{1} --exclude '.*' --acl public-read".format(TMP, BUCKET)
+    )
+    os.system(
+        "aws s3 sync ./app s3://{0} --exclude '.*' --acl public-read".format(BUCKET)
+    )
+    return 0
+
+def flush():
+    for root, dirs, files in os.walk(TMP):
+        for file in files:
+            os.remove(os.path.join(root, file))
+    # for root, dirs, files in os.walk(SRC):
+    #     for file in files:
+    #         os.remove(os.path.join(root, file))
+    return 0
+
+"""
+
+BUILDING STEPS
+
+"""
+
+
+# download latest version of db.js
+print(P+"=> DOWNLOADING LATEST DB"+W)
+download_latest_db()
+
+# get all files from `todump`
+print(P+"=> READING FOLDER"+W)
+files = glob.glob('{0}/*'.format(SRC))
+files.sort(key=os.path.getmtime)
+
+print(G+"=> FILES FOUND"+W)
+for file in files:
+    print("- " + file)
+
+# print(P+"=> COPING FILES TO TEMPORARY FOLDER"+W)
+# # copy original files from `todump` to a temporary folder
+# for file in files:
+#     shutil.copy2(file, TMP)
+
+print(P+"=> FILTERING FILE TYPES"+W)
+videos = filter(is_video, files)
+images = filter(is_image, files)
+
+print(G+"=> VIDEOS"+W)
+for file in videos:
+    print("- " + file)
+print(G+"=> IMAGES"+W)
+for file in images:
+    print("- " + file)
+
+print(P+"=> GENERATING THUMBNAILS FOR VIDEOS"+W)
+generate_thumbnails_for_videos(videos)
+print(P+"=> GENERATING THUMBNAILS FOR IMAGES"+W)
+generate_thumbnails_for_images(images)
+print(P+"=> OPTIMIZING THUMBNAILS FOR WEB"+W)
+compress_thumbnails()
+
+print(P+"=> GENERATING DATA"+W)
+files = filter(is_listed, files)
+delta = generate_data(files)
+
+print(P+"=> APPENDING NEW TO OLD"+W)
+data = []
+with open(TMP+'/db.json', 'r') as file:
+    data = json.load(file)
+data = data + delta
+# data = delta
+
+print(P+"=> WRITING DATA TO DB FILE"+W)
+with open(TMP+'/db.json', 'w') as file:
+    file.write(json.dumps(data))
+
+print(P+"=> WRITING A FULL FEED FILE"+W)
+def list_template(item):
+    if type(item) == type('string'):
+        return """
+        <li>
+            <a href="{0}" target="_blank">
+                <img src="{0}" alt="{0}" />
+            </a>
+        </li>
+        """.format(item)
+    else:
+        return """
+        <li>
+            <a href="{0}" target="_blank">
+                <img src="{1}" alt="{0}" loading="lazy" />
+            </a>
+        </li>
+        """.format(item['original'], item['thumbnail'])
+def html_template(data = []):
+    list_items = []
+    for item in data[::-1]:
+        list_items.append(list_template(item))
+    return """
+    <!DOCTYPE html>
+    <html lang="en" dir="ltr">
+      <head>
+        <meta charset="utf-8">
+        <title>Banana Dumps</title>
+        <link rel="stylesheet" href="style.css">
+        <script src="main.js" charset="utf-8"></script>
+      </head>
+      <body>
+        <h1>Banana Dumps</h1>
+        <p>This gallery contains references, sketches, memories and dreams.</p>
+        <ul>{0}</ul>
+      </body>
+    </html>
+    """.format(''.join(list_items))
+
+with open(TMP+'/everything.html', 'w') as file:
+    file.write(html_template(data))
+
+print(P+"=> SENDING FILES TO BUCKET"+W)
+upload_files()
+
+print(P+"=> CLEANING LOCAL FILES (FLUSH)"+W)
+flush()

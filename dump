@@ -13,10 +13,11 @@ Helper functions and configuration
 
 """
 
-BUCKET = 'bananew'
+BUCKET = 'dumpster.bananabanana.me'
+# BUCKET = 'bananew'
 DB_URL = 'http://bananew.s3.amazonaws.com/db.json'
-SRC = "../bananabanana"
-# SRC = "todump"
+# SRC = "../bananabanana"
+SRC = "todump"
 TMP = "temporary"
 
 W  = '\033[0m'  # white (normal)
@@ -90,10 +91,10 @@ BUILDING STEPS
 
 
 # download latest version of db.js
-# print(P+"=> DOWNLOADING LATEST DB"+W)
-# db = requests.get(DB_URL)
-# open(TMP+"/db.json", 'wb').write(db.content)
-open(TMP+"/db.json", 'wb').write(b'[]')
+print(P+"=> DOWNLOADING LATEST DB"+W)
+db = requests.get(DB_URL)
+open(TMP+"/db.json", 'wb').write(db.content)
+# open(TMP+"/db.json", 'wb').write(b'[]')
 
 # get all files from `todump`
 print(P+"=> READING FOLDER"+W)
@@ -109,8 +110,8 @@ for file in files:
     print("- " + file)
 
 print(P+"=> COPING FILES TO TEMPORARY FOLDER"+W)
-# for file in files:
-#     shutil.copy2(SRC+'/'+file, TMP)
+for file in files:
+    shutil.copy2(SRC+'/'+file, TMP)
 
 print(P+"=> FILTERING FILE TYPES"+W)
 videos = filter(is_video, files)
@@ -161,15 +162,15 @@ print(P+"=> APPENDING NEW TO OLD"+W)
 data = []
 with open(TMP+'/db.json', 'r') as file:
     data = json.load(file)
-# data = data + delta
-data = delta
+data = data + delta
+# data = delta
 
 print(P+"=> WRITING DATA TO DB FILE"+W)
 with open(TMP+'/db.json', 'w') as file:
     file.write(json.dumps(data))
 
 print(P+"=> WRITING A FULL FEED FILE"+W)
-with open(TMP+'/everything.html', 'w') as file:
+with open(TMP+'/index.html', 'w') as file:
     file.write(html_template(data))
 
 print(P+"=> SENDING FILES TO BUCKET"+W)
@@ -183,11 +184,15 @@ os.system(
 print(P+"=> BACKING UP DB"+W)
 shutil.copy2(TMP+'/db.json', './')
 
-
 print(P+"=> CLEANING LOCAL FILES"+W)
-# for root, dirs, files in os.walk(TMP):
-#     for file in files:
-#         os.remove(os.path.join(root, file))
-# for root, dirs, files in os.walk(SRC):
-#     for file in files:
-#         os.remove(os.path.join(root, file))
+clean_temporary = input("Clean temporary folder? (y/n)")
+if clean_temporary.lower()[0] == 'y':
+    for root, dirs, files in os.walk(TMP):
+        for file in files:
+            os.remove(os.path.join(root, file))
+
+clean_todump = input("Clean droppings folder? (y/n)")
+if clean_todump.lower()[0] == 'y':
+    for root, dirs, files in os.walk(SRC):
+        for file in files:
+            os.remove(os.path.join(root, file))

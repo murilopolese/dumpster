@@ -12,10 +12,10 @@ Because I literally just move files to this folder, the files don't have metadat
 
 ## What do I want
 
+### Dumping
+
 - Drop files in a folder
 - Run a script
-
-- Erase files from my hard drive after upload
 	- Append new files to db
 		- Download db
 		- Load db into memory
@@ -23,29 +23,39 @@ Because I literally just move files to this folder, the files don't have metadat
 		- Create data: filename, extension, fullname
 		- Append data to db in memory
 		- Write db back to file
+	- Optimize thumbnails for web
+		- Thumbnails for images
+			- Copy and resize images with imagemagik
+			- Prepend thumbnail_
+		- Thumbnails for videos
+			- Create png thumnails with ffmpeg
+			- Prepend thumbnails_
+		- Progressive
+		- JPG compression
+	- Generate a static html page from db (aka "app")
+	- RSS (TODO)
 	- Erase files from hard drive only after upload success
-		- Upload/Send/Sync files in temp folder and app
+		- Upload/Send/Sync files in temporary folder and app
+		- Upload/Send/Sync files in app folder
 		- Erase temp folder
-		- Prompt erase local folder
-- Optimize thumbnails for web
-	- Thumbnails for images
-		- Copy and resize images with imagemagik
-		- Prepend thumbnail_
-	- Thumbnails for videos
-		- Create png thumnails with ffmpeg
-		- Prepend thumbnails_
-	- Progressive
-	- JPG compression
-	- Lazy loading
-- RSS (TODO)
+		- Prompt to erase local folder
 
 
-## app
-- Load db.js
+### Vieweing / Gallery app
+
 - Display page
 - Lazy load images
-- Reveal effect
+- If javascript is enabled, show only a few
 - Infinite scroll
+- Reveal effect (TODO)
 - Browse by date (TODO)
 - Info and credits (TODO)
 - Contact (NOPE)
+
+
+## How does it work
+
+- There is a file called `dump`. That's a python script that does all the magic.
+- There is a folder called `todump`. Put the files to dump there.
+- The `temporary` folder is a workbench. It's where thumbnails are generated, db is downloaded and altered, etc...
+- The folder `app` has the (rather minimal) source code for the gallery app.

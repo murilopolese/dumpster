@@ -6,6 +6,7 @@ import sys
 import shutil
 import requests
 import json
+import random
 
 """
 
@@ -15,7 +16,7 @@ Helper functions and configuration
 
 BUCKET = 'dumpster.bananabanana.me'
 # BUCKET = 'bananew'
-DB_URL = 'http://bananew.s3.amazonaws.com/db.json'
+DB_URL = 'http://dumpster.bananabanana.me/db.json'
 # SRC = "../bananabanana"
 SRC = "todump"
 TMP = "temporary"
@@ -89,7 +90,6 @@ BUILDING STEPS
 
 """
 
-
 # download latest version of db.js
 print(P+"=> DOWNLOADING LATEST DB"+W)
 db = requests.get(DB_URL)
@@ -108,6 +108,13 @@ for g in globs:
 print(G+"=> FILES FOUND"+W)
 for file in files:
     print("- " + file)
+
+print(G+"=> PREPENDING ID"+W)
+for i, file in enumerate(files):
+    new_name = "{0}_{1}".format(random.randrange(1, 1024*1024), file)
+    os.rename(SRC + '/' + file, SRC + '/' + new_name)
+    files[i] = new_name
+    print("- " + new_name)
 
 print(P+"=> COPING FILES TO TEMPORARY FOLDER"+W)
 for file in files:
